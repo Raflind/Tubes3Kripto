@@ -1,97 +1,130 @@
 // Navigasi Log/Reg
+import {
+  generateKeyPair,
+  exportPublicKey,
+  exportPrivateKey,
+  generateStorageKey,
+} from "./crypto/ecdh.js";
+
+import { encryptAndSign, _bufferToBase64 } from "./crypto/aes_hmac.js";
+
 function toggleForm(type) {
-    const loginForm = document.getElementById('login-form');
-    const regForm = document.getElementById('register-form');
-    if (type === 'login') {
-        clearInputs();
-        regForm.classList.remove('active');
-        loginForm.classList.add('active');
-    } else {
-        clearInputs();
-        loginForm.classList.remove('active');
-        regForm.classList.add('active');
-    }
+  const loginForm = document.getElementById("login-form");
+  const regForm = document.getElementById("register-form");
+  if (type === "login") {
+    clearInputs();
+    regForm.classList.remove("active");
+    loginForm.classList.add("active");
+  } else {
+    clearInputs();
+    loginForm.classList.remove("active");
+    regForm.classList.add("active");
+  }
 }
 
 // Register (masih placeholder)
-async function handleRegister() {
-    const email = document.getElementById('reg-email').value;
-    const pass = document.getElementById('reg-pass').value;
-    if (!email || !pass) {
-        alert("Please fill email and password!");
-        return;
-    }
-    // console.log("Registered:", email);
+export async function handleRegister() {
+  const email = document.getElementById("reg-email").value;
+  const password = document.getElementById("reg-pass").value;
+  if (!email || !password) {
+    alert("Please fill email and password!");
+    return;
+  }
+  // console.log("Registered:", email);
+  const keyPair = await generateKeyPair();
+  const publickey = await exportPublicKey(keyPair.publicKey);
+  const privatekey = await exportPrivateKey(keyPair.privateKey);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const { aesKey, hmacKey } = await generateStorageKey(password, salt);
+  const encrypted = await encryptAndSign(privatekey, aesKey, hmacKey);
 
-    // placeholder for Keys Geneartion 
-    
-    alert("Registration Success!");
-    toggleForm('login');
+  const response = await fetch("/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: email,
+      password: password,
+      publickey: publickey,
+      privatekey: encrypted.ciphertext,
+      salt: _bufferToBase64(salt),
+      iv: encrypted.iv,
+      mac: encrypted.mac,
+    }),
+  });
+
+  if (response.ok) alert("Registration Success!");
+  toggleForm("login");
 }
 
 // Login (masih placeholder)
 async function handleLogin() {
-    const email = document.getElementById('login-email').value;
-    const pass = document.getElementById('login-pass').value;
-    if (!email || !pass) {
-        alert("Please fill email and password!");
-        return;
-    }
+  const email = document.getElementById("login-email").value;
+  const pass = document.getElementById("login-pass").value;
+  if (!email || !pass) {
+    alert("Please fill email and password!");
+    return;
+  }
 
-    // placeholder for keys fetching and decryption to use after log in
-    clearInputs();
-    const authContainer = document.getElementById('auth-container');
-    const chatApp = document.getElementById('chat-app');
-    if (authContainer && chatApp) {
-        authContainer.style.display = 'none';
-        chatApp.style.display = 'flex';     
-        console.log("Logged in as:", email);
-    } else {
-        console.error("Error: Container ID not found!");
-    }
+  // placeholder for keys fetching and decryption to use after log in
+  clearInputs();
+  const authContainer = document.getElementById("auth-container");
+  const chatApp = document.getElementById("chat-app");
+  if (authContainer && chatApp) {
+    authContainer.style.display = "none";
+    chatApp.style.display = "flex";
+    console.log("Logged in as:", email);
+  } else {
+    console.error("Error: Container ID not found!");
+  }
 }
 
 // Contact Selection (masih placeholder)
 function selectContact(name) {
-    document.getElementById('empty-chat').style.display = 'none';
-    document.getElementById('active-chat').style.display = 'flex';
-    document.getElementById('chatting-with').innerText = name;
+  document.getElementById("empty-chat").style.display = "none";
+  document.getElementById("active-chat").style.display = "flex";
+  document.getElementById("chatting-with").innerText = name;
 
-    // placeholder for key exchange
+  // placeholder for key exchange
 }
 
 // Sending Message (masih placeholder)
 function sendMessage() {
-    const input = document.getElementById('msg-input');
-    const msg = input.value;
-    if (!msg) return;
-    const display = document.getElementById('message-display');
-    const div = document.createElement('div');
-    div.className = 'bubble sent';
-    div.innerText = msg;
-    display.appendChild(div);
-    display.scrollTop = display.scrollHeight;
+  const input = document.getElementById("msg-input");
+  const msg = input.value;
+  if (!msg) return;
+  const display = document.getElementById("message-display");
+  const div = document.createElement("div");
+  div.className = "bubble sent";
+  div.innerText = msg;
+  display.appendChild(div);
+  display.scrollTop = display.scrollHeight;
 
-    // AES encrypt
-    
-    input.value = '';
+  // AES encrypt
+
+  input.value = "";
 }
 
 // Logout (masih placeholder)
 function handleLogout() {
-    if (confirm("Are you sure you want to logout?")) {
-        clearInputs();
-        document.getElementById('auth-container').style.display = 'flex';
-        document.getElementById('chat-app').style.display = 'none';
-        
-        // placeholder to remove private key
-        // activePrivateKey = null;
-    }
+  if (confirm("Are you sure you want to logout?")) {
+    clearInputs();
+    document.getElementById("auth-container").style.display = "flex";
+    document.getElementById("chat-app").style.display = "none";
+
+    // placeholder to remove private key
+    // activePrivateKey = null;
+  }
 }
 
 function clearInputs() {
-    const inputs = document.querySelectorAll('input');
-    inputs.forEach(input => {
-        input.value = '';
-    });
+  const inputs = document.querySelectorAll("input");
+  inputs.forEach((input) => {
+    input.value = "";
+  });
 }
+
+window.handleRegister = handleRegister;
+window.handleLogin = handleLogin;
+window.toggleForm = toggleForm;
