@@ -131,7 +131,7 @@ function rawToDer(rawSignature, size) {
 }
 
 
-function sign(header, claims, payload, privKey) {
+export function sign(header, claims, payload, privKey) {
 
     if (!header.alg) {
         throw new JWTError("alg tidak ditemukan");
@@ -191,7 +191,7 @@ function sign(header, claims, payload, privKey) {
     );
 }
 
-function verify(jwt, publicKey, options = {}) {
+export function verify(jwt, publicKey, options = {}) {
 
     const parts = jwt.split(".");
 
