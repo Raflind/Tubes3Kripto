@@ -173,6 +173,11 @@ function handleLogout() {
     localStorage.removeItem("my_email");
     localStorage.removeItem("jwt_token");
     localStorage.removeItem("my_private_key");
+    document.getElementById("active-chat").style.display = "none";
+    document.getElementById("empty-chat").style.display = "flex";
+    document.getElementById("message-display").innerHTML = "";
+    activeContact = null;
+    activeSessionKeys = null;
     clearInputs();
     document.getElementById("auth-container").style.display = "flex";
     document.getElementById("chat-app").style.display = "none";
@@ -219,11 +224,12 @@ function renderContacts(contacts) {
     const item = document.createElement("div");
     item.className = "contact-item";
     item.onclick = () => selectContact(contact);
+    const contactUsername = contact.email.split('@')[0];
 
     item.innerHTML = `
             <div class="contact-info">
                 <span class="name">${contact.email}</span>
-                <span class="last-msg">Start a secure chat</span>
+                <span class="last-msg">Click here to message ${contactUsername}</span>
             </div>
         `;
     container.appendChild(item);
@@ -294,10 +300,20 @@ async function _loadMessages() {
 }
 function _appendBubble(text, direction) {
   const display = document.getElementById("message-display");
-  const msgDiv = document.createElement("div");
-  msgDiv.className = `message ${direction}`;
-  msgDiv.innerHTML = `<div class="msg-bubble">${text}</div>`;
-  display.appendChild(msgDiv);
+  const msgWrapper = document.createElement("div");
+  const email = direction === "sent" 
+    ? localStorage.getItem("my_email") 
+    : activeContact;
+  const username = email ? email.split('@')[0] : "Unknown";
+  msgWrapper.className = `message-wrapper ${direction}`;
+  msgWrapper.innerHTML = `
+    <div class="message-content">
+      <span class="message-username">${username}</span>
+      <div class="msg-bubble">${text}</div>
+    </div>
+  `;
+  
+  display.appendChild(msgWrapper);
   display.scrollTop = display.scrollHeight;
 }
 

@@ -266,6 +266,69 @@ body {
 }
 
 /* Bubble Chat */
+#message-display {
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    gap: 15px; 
+    overflow-y: auto;
+}
+
+.message-wrapper {
+    display: flex;
+    width: 100%;
+}
+
+.message-wrapper.sent {
+    justify-content: flex-end; 
+}
+
+.message-wrapper.received {
+    justify-content: flex-start; /* Geser ke kiri */
+}
+
+/* Konten di dalam wrapper */
+.message-content {
+    max-width: 70%;
+    display: flex;
+    flex-direction: column;
+}
+
+.sent .message-content {
+    align-items: flex-end; /* Username rata kanan jika pesan terkirim */
+}
+
+/* Styling Username */
+.message-username {
+    font-size: 0.75rem;
+    color: #aaaaaa;
+    margin-bottom: 4px;
+    font-weight: bold;
+}
+
+/* Styling Bubble Chat */
+.msg-bubble {
+    padding: 10px 15px;
+    border-radius: 15px;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+/* Warna untuk pesan kita (Kanan) */
+.sent .msg-bubble {
+    background-color: #ff6600; /* Warna khas Webchat kamu */
+    color: white;
+    border-bottom-right-radius: 2px;
+}
+
+/* Warna untuk pesan orang lain (Kiri) */
+.received .msg-bubble {
+    background-color: #333333;
+    color: #eeeeee;
+    border-bottom-left-radius: 2px;
+}
+
 .bubble {
     max-width: 70%;
     padding: 10px 15px;
