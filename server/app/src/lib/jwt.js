@@ -1,9 +1,9 @@
 import * as crypto from "crypto";
 
-class JWTError extends Error {}
-class InvalidTokenError extends JWTError {}
-class InvalidSignError extends JWTError {}
-class ExpiredSignError extends JWTError {}
+export class JWTError extends Error {}
+export class InvalidTokenError extends JWTError {}
+export class InvalidSignError extends JWTError {}
+export class ExpiredSignError extends JWTError {}
 
 function urlEncode(data) {
   return Buffer.from(data)
