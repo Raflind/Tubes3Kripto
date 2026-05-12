@@ -194,3 +194,78 @@ export function verify(jwt, publicKey, options = {}) {
     signature: encodedSignature,
   };
 }
+
+// const {
+//     privateKey,
+//     publicKey
+// } = crypto.generateKeyPairSync("ec", {
+//     namedCurve: "prime256v1"
+// });
+
+// const {
+//     privateKey: privateKey2,
+//     publicKey: publicKey2
+// } = crypto.generateKeyPairSync("ec", {
+//     namedCurve: "prime256v1"
+// });
+
+// const pemPrivate = privateKey.export({
+//     type: "pkcs8",
+//     format: "pem"
+// });
+
+// const pemPublic = publicKey.export({
+//     type: "spki",
+//     format: "pem"
+// });
+
+// const pemPrivate2 = privateKey2.export({
+//     type: "pkcs8",
+//     format: "pem"
+// });
+
+// const pemPublic2 = publicKey2.export({
+//     type: "spki",
+//     format: "pem"
+// });
+
+// const token = sign(
+//     {
+//         alg: "ES256",
+//         typ: "JWT",
+//     },
+
+//     {
+//         iss: "Evan Raja Kripto",
+//         sub: "Rafli",
+//         aud: "chat",
+//         iat: Math.floor(Date.now() / 1000),
+//         nbf: Math.floor(Date.now() / 1000) ,
+//         exp: Math.floor(Date.now() / 1000) + 3600,
+//     },
+
+//     {
+//         message: "Halo siapa nama kamu"
+//     },
+//     pemPrivate
+// );
+
+
+// console.log("JWT:");
+// console.log(token);
+
+// console.log();
+
+// const decoded = verify(
+//     token,
+//     pemPublic,
+//     {
+//         algs: ["ES256"],
+//         iss: "Evan Raja Kripto",
+//         aud: "chat",
+//         iat: 0
+//     }
+// );
+
+// console.log("DECODED:");
+// console.log(decoded);
