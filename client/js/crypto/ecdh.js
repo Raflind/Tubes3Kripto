@@ -1,4 +1,4 @@
-function deriveSharedKey(privateKey, publicKey) {
+export function deriveSharedKey(privateKey, publicKey) {
   return window.crypto.subtle.deriveBits(
     {
       name: "X25519",
@@ -9,32 +9,43 @@ function deriveSharedKey(privateKey, publicKey) {
   );
 }
 
-async function deriveAESKey(sharedSecret) {
+export async function deriveAESKey(sharedSecret, salt) {
   const hkdfKey = await crypto.subtle.importKey(
     "raw",
     sharedSecret,
     "HKDF",
     false,
-    ["deriveKey"],
+    ["deriveBits"],
   );
 
-  return await crypto.subtle.deriveKey(
+  const keyBits = await crypto.subtle.deriveBits(
     {
       name: "HKDF",
       hash: "SHA-256",
-      salt: new TextEncoder().encode(
-        crypto.getRandomValues(new Uint8Array(16)),
-      ),
-      info: new TextEncoder().encode("aes-key"),
+      salt: salt, // FIX: raw bytes, not TextEncoder'd
+      info: new TextEncoder().encode("messaging"),
     },
     hkdfKey,
-    {
-      name: "AES-CBC",
-      length: 256,
-    },
+    512,
+  );
+
+  const aesKey = await crypto.subtle.importKey(
+    "raw",
+    keyBits.slice(0, 32),
+    { name: "AES-CBC" },
     false,
     ["encrypt", "decrypt"],
   );
+
+  const hmacKey = await crypto.subtle.importKey(
+    "raw",
+    keyBits.slice(32, 64),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"],
+  );
+
+  return { aesKey, hmacKey };
 }
 
 export async function generateKeyPair() {
@@ -99,4 +110,17 @@ export async function generateStorageKey(password, salt) {
     ["sign", "verify"],
   );
   return { aesKey, hmacKey };
+}
+
+export async function importPrivateKey(base64) {
+  const pkcs8 = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  return crypto.subtle.importKey("pkcs8", pkcs8, { name: "X25519" }, true, [
+    "deriveKey",
+    "deriveBits",
+  ]);
+}
+
+export async function importPublicKey(base64) {
+  const raw = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  return crypto.subtle.importKey("raw", raw, { name: "X25519" }, true, []);
 }

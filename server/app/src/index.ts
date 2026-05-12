@@ -26,7 +26,7 @@ const app = new Elysia()
 
       try {
         const users = await sql`
-          SELECT email, password, publickey, encrypted_pk, salt, iv, mac
+          SELECT id, email, password, publickey, encrypted_pk, salt, iv, mac
           FROM users WHERE email = ${email}`;
         if (users.length === 0) {
           set.status = 401;
@@ -59,7 +59,9 @@ const app = new Elysia()
           success: true,
           token: token,
           user: {
-            publicKey: user.public_key,
+            id: user.id,
+            email: user.email,
+            publicKey: user.publickey,
             encryptedPrivateKey: user.encrypted_pk,
             salt: user.salt,
             iv: user.iv,
@@ -112,11 +114,12 @@ const app = new Elysia()
     },
   )
 
-  .post("/send-message", async ({ body, headers, set }) => {
+  .post("/get-contacts", async ({ headers, set }) => {
     const authHeader = headers["authorization"];
-    if (!authHeader) {
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       set.status = 401;
-      return { error: "Missing Token" };
+      return { success: false, message: "Missing or invalid token" };
     }
 
     const token = authHeader.split(" ")[1];
@@ -126,14 +129,112 @@ const app = new Elysia()
         iss: "ITB-Chat-Server",
         algs: ["ES256"],
       });
-      const senderEmail = decoded.payload.sub;
-      console.log("Decoded Token:", decoded);
-    } catch (e: any) {
-      console.error("JWT Verification Failed:", e.message);
+      const userEmail = decoded.payload.sub;
+      const currentUser = await sql`
+              SELECT id FROM users WHERE email = ${userEmail}
+          `;
+      if (currentUser.length === 0) {
+        set.status = 404;
+        return { success: false, message: "User not found" };
+      }
+
+      const myId = currentUser[0].id;
+      const contacts = await sql`
+              SELECT id, email, publickey
+              FROM users
+              WHERE id != ${myId}
+          `;
+
+      return {
+        success: true,
+        contacts: contacts,
+      };
+    } catch (error: any) {
+      console.error("JWT/DB Error:", error.message);
       set.status = 401;
-      return { error: "Invalid Token" };
+      return { success: false, message: "Unauthorized: " + error.message };
     }
   })
+
+  .post(
+    "/send-message",
+    async ({ body, headers, set }) => {
+      const authHeader = headers["authorization"];
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        set.status = 401;
+        return { success: false, error: "Unauthorized" };
+      }
+
+      const token = authHeader.split(" ")[1];
+
+      try {
+        const decoded = verify(token, pubKey, {
+          iss: "ITB-Chat-Server",
+          algs: ["ES256"],
+        });
+        const senderEmail = decoded.payload.sub;
+        const { to, iv, ciphertext, mac } = body;
+        await sql`
+              INSERT INTO messages (sender_email, recipient_email, iv, ciphertext, mac)
+              VALUES (${senderEmail}, ${to}, ${iv}, ${ciphertext}, ${mac})
+          `;
+
+        return { success: true, message: "Message delivered to server" };
+      } catch (error: any) {
+        console.error("Backend Error:", error.message);
+        set.status = 401;
+        return { success: false, error: "Invalid token or server error" };
+      }
+    },
+    {
+      body: t.Object({
+        to: t.String(),
+        iv: t.String(),
+        ciphertext: t.String(),
+        mac: t.String(),
+      }),
+    },
+  )
+
+  .post(
+    "/get-messages",
+    async ({ body, headers, set }) => {
+      const authHeader = headers["authorization"];
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        set.status = 401;
+        return { success: false, error: "Unauthorized" };
+      }
+      const token = authHeader.split(" ")[1];
+      try {
+        const decoded = verify(token, pubKey, {
+          iss: "ITB-Chat-Server",
+          algs: ["ES256"],
+        });
+        const myEmail = decoded.payload.sub;
+        const { with: contactEmail } = body;
+        const messages = await sql`
+            SELECT sender_email AS "from", iv, ciphertext, mac, created_at
+            FROM messages
+            WHERE
+                (sender_email = ${myEmail} AND recipient_email = ${contactEmail})
+                OR
+                (sender_email = ${contactEmail} AND recipient_email = ${myEmail})
+            ORDER BY created_at ASC
+        `;
+        return { success: true, messages };
+      } catch (error: any) {
+        console.error("Fetch Error:", error.message);
+        set.status = 401;
+        return { success: false, error: "Invalid token or server error" };
+      }
+    },
+    {
+      body: t.Object({
+        with: t.String(),
+      }),
+    },
+  )
+
   .listen(3000);
 
 console.log(

@@ -1,8 +1,11 @@
-// Navigasi Log/Reg
 import {
   generateKeyPair,
   exportPublicKey,
   exportPrivateKey,
+  importPrivateKey,
+  importPublicKey,
+  deriveAESKey,
+  deriveSharedKey,
   generateStorageKey,
 } from "./crypto/ecdh.js";
 
@@ -96,6 +99,7 @@ async function handleLogin() {
       alert("Login Successful!");
       document.getElementById("auth-container").style.display = "none";
       document.getElementById("chat-app").style.display = "flex";
+      loadContacts();
     } catch (err) {
       console.error(err);
       alert("Login failed: Could not decrypt private key.");
@@ -105,41 +109,73 @@ async function handleLogin() {
   }
 }
 
-// Contact Selection (masih placeholder)
-function selectContact(name) {
+async function selectContact(contact) {
+  activeContact = contact.email;
+
   document.getElementById("empty-chat").style.display = "none";
   document.getElementById("active-chat").style.display = "flex";
-  document.getElementById("chatting-with").innerText = name;
+  document.getElementById("chatting-with").innerText = contact.email;
+  document.getElementById("message-display").innerHTML = "";
 
-  // placeholder for key exchange
+  try {
+    await _sessionKeys(contact);
+    await _loadMessages();
+  } catch (err) {
+    console.error("Key exchange failed:", err);
+    alert("Could not establish secure session with this contact.");
+  }
 }
 
 // Sending Message (masih placeholder)
-function sendMessage() {
+async function sendMessage() {
   const input = document.getElementById("msg-input");
-  const msg = input.value;
-  if (!msg) return;
-  const display = document.getElementById("message-display");
-  const div = document.createElement("div");
-  div.className = "bubble sent";
-  div.innerText = msg;
-  display.appendChild(div);
-  display.scrollTop = display.scrollHeight;
+  const plaintext = input.value.trim();
+  if (!plaintext) return;
+  if (!activeSessionKeys) {
+    alert("Secure session not established yet. Please wait.");
+    return;
+  }
+  try {
+    const payload = await encryptAndSign(
+      plaintext,
+      activeSessionKeys.aesKey,
+      activeSessionKeys.hmacKey,
+    );
+    const token = localStorage.getItem("jwt_token");
+    const response = await fetch("/send-message", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        to: activeContact,
+        iv: payload.iv,
+        ciphertext: payload.ciphertext,
+        mac: payload.mac,
+      }),
+    });
 
-  // AES encrypt
-
-  input.value = "";
+    if (response.ok) {
+      input.value = "";
+      _appendBubble(plaintext, "sent");
+    } else {
+      alert("Failed to send message.");
+    }
+  } catch (err) {
+    console.error("Encryption error:", err);
+    alert("Encryption failed.");
+  }
 }
 
-// Logout (masih placeholder)
 function handleLogout() {
   if (confirm("Are you sure you want to logout?")) {
+    localStorage.removeItem("my_email");
+    localStorage.removeItem("jwt_token");
+    localStorage.removeItem("my_private_key");
     clearInputs();
     document.getElementById("auth-container").style.display = "flex";
     document.getElementById("chat-app").style.display = "none";
-
-    // placeholder to remove private key
-    // activePrivateKey = null;
   }
 }
 
@@ -150,19 +186,129 @@ function clearInputs() {
   });
 }
 
-async function decryptPrivateKey(encrypted_pk, password, saltStr) {
-  const salt = _base64ToArrayBuffer(saltStr);
-  const { aesKey, hmacKey } = await getStorageKey(password, salt);
-  const privateKeyStr = await decryptAndVerify(
-    encrypted_pk.ciphertext,
-    encrypted_pk.iv,
-    encrypted_pk.mac,
-    aesKey,
-    hmacKey,
-  );
-  return privateKeyStr;
+async function loadContacts() {
+  const token = localStorage.getItem("jwt_token");
+  if (!token) return;
+
+  try {
+    const response = await fetch("/get-contacts", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      renderContacts(result.contacts);
+    }
+    if (response.status === 401) {
+      handleLogout();
+      return;
+    }
+  } catch (err) {
+    console.error("Failed to load contacts:", err);
+  }
 }
 
+function renderContacts(contacts) {
+  const container = document.getElementById("contact-list-container");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  contacts.forEach((contact) => {
+    const item = document.createElement("div");
+    item.className = "contact-item";
+    item.onclick = () => selectContact(contact);
+
+    item.innerHTML = `
+            <div class="contact-info">
+                <span class="name">${contact.email}</span>
+                <span class="last-msg">Start a secure chat</span>
+            </div>
+        `;
+    container.appendChild(item);
+  });
+}
+
+function checkAuth() {
+  const token = localStorage.getItem("jwt_token");
+
+  if (token) {
+    document.getElementById("auth-container").style.display = "none";
+    document.getElementById("chat-app").style.display = "flex";
+    loadContacts();
+  } else {
+    document.getElementById("auth-container").style.display = "flex";
+    document.getElementById("chat-app").style.display = "none";
+  }
+}
+
+async function _sessionKeys(receiver) {
+  const token = localStorage.getItem("jwt_token");
+  const email = localStorage.getItem("my_email");
+  const b64privatekey = localStorage.getItem("my_private_key");
+  const b64publickey = receiver.publickey;
+  const privatekey = await importPrivateKey(b64privatekey);
+  const publickey = await importPublicKey(b64publickey);
+
+  const sharedkey = await deriveSharedKey(privatekey, publickey);
+  const saltinput = [email, receiver.email].sort().join("|");
+  const salt = new TextEncoder().encode(saltinput);
+
+  activeSessionKeys = await deriveAESKey(sharedkey, salt);
+}
+
+async function _loadMessages() {
+  if (!activeSessionKeys) return;
+
+  const token = localStorage.getItem("jwt_token");
+  const response = await fetch("/get-messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ with: activeContact }),
+  });
+
+  if (!response.ok) return;
+  const { messages } = await response.json();
+
+  const myEmail = localStorage.getItem("my_email");
+  const display = document.getElementById("message-display");
+  display.innerHTML = "";
+
+  for (const msg of messages) {
+    try {
+      const plaintext = await verifyAndDecrypt(
+        { iv: msg.iv, ciphertext: msg.ciphertext, mac: msg.mac },
+        activeSessionKeys.aesKey,
+        activeSessionKeys.hmacKey,
+      );
+      const direction = msg.from === myEmail ? "sent" : "received";
+      _appendBubble(plaintext, direction);
+    } catch {
+      _appendBubble("error");
+    }
+  }
+}
+function _appendBubble(text, direction) {
+  const display = document.getElementById("message-display");
+  const msgDiv = document.createElement("div");
+  msgDiv.className = `message ${direction}`;
+  msgDiv.innerHTML = `<div class="msg-bubble">${text}</div>`;
+  display.appendChild(msgDiv);
+  display.scrollTop = display.scrollHeight;
+}
+
+let activeSessionKeys = null;
+let activeContact = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+  checkAuth();
+});
 window.handleRegister = handleRegister;
 window.handleLogin = handleLogin;
+window.handleLogout = handleLogout;
+window.sendMessage = sendMessage;
 window.toggleForm = toggleForm;
