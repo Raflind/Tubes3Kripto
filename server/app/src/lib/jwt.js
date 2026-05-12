@@ -1,4 +1,4 @@
-const crypto = require("crypto");
+import * as crypto from "crypto";
 
 class JWTError extends Error {}
 class InvalidTokenError extends JWTError {}
@@ -51,71 +51,18 @@ const algorithm = {
   },
 };
 
-function derToRaw(derSignature, size) {
-  let offset = 3;
-
-  let rLength = derSignature[offset];
-  offset++;
-
-  let r = derSignature.slice(offset, offset + rLength);
-  offset += rLength + 1;
-
-  let sLength = derSignature[offset];
-  offset++;
-
-  let s = derSignature.slice(offset, offset + sLength);
-
-  if (r[0] === 0x00) {
-    r = r.slice(1);
-  }
-
-  if (s[0] === 0x00) {
-    s = s.slice(1);
-  }
-
-  if (r.length < size) {
-    r = Buffer.concat([Buffer.alloc(size - r.length), r]);
-  }
-
-  if (s.length < size) {
-    s = Buffer.concat([Buffer.alloc(size - s.length), s]);
-  }
-
-  return Buffer.concat([r, s]);
-}
-
-function rawToDer(rawSignature, size) {
-  let r = rawSignature.slice(0, size);
-  let s = rawSignature.slice(size);
-
-  while (r.length > 1 && r[0] === 0x00) {
-    r = r.slice(1);
-  }
-
-  while (s.length > 1 && s[0] === 0x00) {
-    s = s.slice(1);
-  }
-
-  if (r[0] & 0x80) {
-    r = Buffer.concat([Buffer.from([0x00]), r]);
-  }
-
-  if (s[0] & 0x80) {
-    s = Buffer.concat([Buffer.from([0x00]), s]);
-  }
-
-  const totalLength = 2 + r.length + 2 + s.length;
-
-  return Buffer.concat([
-    Buffer.from([0x30, totalLength]),
-    Buffer.from([0x02, r.length]),
-    r,
-    Buffer.from([0x02, s.length]),
-    s,
-  ]);
-}
-
 export function sign(header, claims, payload, privKey) {
+  const allowedHeaderKeys = ["alg", "typ"];
+
+  for (const key of Object.keys(header)) {
+
+      if (!allowedHeaderKeys.includes(key)) {
+          throw new JWTError(
+              `Parameter ini tidak diperbolehkan: ${key}`
+          );
+      }
+  }
+
   if (!header.alg) {
     throw new JWTError("alg tidak ditemukan");
   }
@@ -147,14 +94,12 @@ export function sign(header, claims, payload, privKey) {
 
   const headerPayload = `${encodedHeader}.${encodedPayload}`;
 
-  const derSignature = crypto.sign(config.hash, Buffer.from(headerPayload), {
+  const signature = crypto.sign(config.hash, Buffer.from(headerPayload), {
     key: privKey,
-    dsaEncoding: "der",
+    dsaEncoding: "ieee-p1363",
   });
 
-  const rawSignature = derToRaw(derSignature, config.size);
-
-  const encodedSignature = urlEncode(rawSignature);
+  const encodedSignature = urlEncode(signature);
 
   return `${encodedHeader}.` + `${encodedPayload}.` + `${encodedSignature}`;
 }
@@ -193,18 +138,16 @@ export function verify(jwt, publicKey, options = {}) {
 
   const headerPayload = `${encodedHeader}.${encodedPayload}`;
 
-  const rawSignature = urlDecode(encodedSignature);
-
-  const derSignature = rawToDer(rawSignature, config.size);
+  const signature = urlDecode(encodedSignature);
 
   const valid = crypto.verify(
     config.hash,
     Buffer.from(headerPayload),
     {
       key: publicKey,
-      dsaEncoding: "der",
+      dsaEncoding: "ieee-p1363",
     },
-    derSignature,
+    signature,
   );
 
   if (!valid) {
