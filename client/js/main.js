@@ -141,6 +141,14 @@ async function sendMessage() {
       activeSessionKeys.aesKey,
       activeSessionKeys.hmacKey,
     );
+    
+    // Pengujian
+    console.log("PENGUJIAN ENKRIPSI:");
+    console.log("1. Plaintext:", plaintext);
+    console.log("2. IV:", payload.iv);
+    console.log("3. Ciphertext:", payload.ciphertext);
+    console.log("4. MAC:", payload.mac);
+
     const token = localStorage.getItem("jwt_token");
     const response = await fetch("/send-message", {
       method: "POST",
@@ -262,6 +270,19 @@ async function _sessionKeys(receiver) {
   const salt = new TextEncoder().encode(saltinput);
 
   activeSessionKeys = await deriveAESKey(sharedkey, salt);
+
+  // Pengujian
+  const myEmail = localStorage.getItem("my_email");
+  const myPriv = localStorage.getItem("my_private_key");
+  const targetPub = receiver.publickey;
+  console.log(`${myEmail}:`);
+  console.log("Private Key:", myPriv.substring(0, 10) + "...");
+  console.log("Target Public Key:", targetPub.substring(0, 10) + "...");
+  console.log("PENGUJIAN ECDH:");
+  console.log("Shared Secret (Base64):", _bufferToBase64(sharedkey));
+  console.log("PENGUJIAN KDF:");
+  console.log("AES Key Generated:", activeSessionKeys.aesKey);
+  console.log("HMAC Key Generated:", activeSessionKeys.hmacKey);
 }
 
 async function _loadMessages() {
@@ -286,11 +307,19 @@ async function _loadMessages() {
 
   for (const msg of messages) {
     try {
+      // Simulasi serangan untuk pengujian
+      // msg.mac = msg.mac.slice(0, -1) + (msg.mac.slice(-1) === 'A' ? 'B' : 'A');
+      // msg.ciphertext = (msg.ciphertext[0] === 'x' ? 'y' : 'x') + msg.ciphertext.slice(1);
+      console.log("PENGUJIAN DEKRIPSI:");
+      console.log("1. Ciphertext Diterima:", msg.ciphertext);
+      console.log("2. MAC Diterima:", msg.mac)
       const plaintext = await verifyAndDecrypt(
         { iv: msg.iv, ciphertext: msg.ciphertext, mac: msg.mac },
         activeSessionKeys.aesKey,
         activeSessionKeys.hmacKey,
       );
+      console.log("3. Status: Verifikasi dan Dekripsi Berhasil!");
+      console.log("4. Plaintext Hasil Dekripsi:", plaintext);
       const direction = msg.from === myEmail ? "sent" : "received";
       _appendBubble(plaintext, direction);
     } catch {
