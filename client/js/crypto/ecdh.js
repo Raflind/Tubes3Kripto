@@ -85,7 +85,7 @@ export async function generateStorageKey(password, salt) {
     keyBits.slice(0, 32),
     "AES-CBC",
     false,
-    ["encrypt"],
+    ["encrypt", "decrypt"],
   );
 
   const hmacKey = await crypto.subtle.importKey(
@@ -96,7 +96,7 @@ export async function generateStorageKey(password, salt) {
       hash: "SHA-256",
     },
     false,
-    ["sign"],
+    ["sign", "verify"],
   );
   return { aesKey, hmacKey };
 }

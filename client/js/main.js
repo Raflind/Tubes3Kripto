@@ -6,7 +6,12 @@ import {
   generateStorageKey,
 } from "./crypto/ecdh.js";
 
-import { encryptAndSign, _bufferToBase64 } from "./crypto/aes_hmac.js";
+import {
+  encryptAndSign,
+  _bufferToBase64,
+  _base64ToArrayBuffer,
+  verifyAndDecrypt,
+} from "./crypto/aes_hmac.js";
 
 function toggleForm(type) {
   const loginForm = document.getElementById("login-form");
@@ -54,29 +59,49 @@ export async function handleRegister() {
     }),
   });
 
-  if (response.ok) alert("Registration Success!");
-  toggleForm("login");
+  if (response.ok) (alert("Registration Berhasil!"), toggleForm("login"));
+  else alert("Register Gagal!");
 }
 
 // Login (masih placeholder)
 async function handleLogin() {
   const email = document.getElementById("login-email").value;
-  const pass = document.getElementById("login-pass").value;
-  if (!email || !pass) {
-    alert("Please fill email and password!");
-    return;
-  }
+  const password = document.getElementById("login-pass").value;
+  const response = await fetch("/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
 
-  // placeholder for keys fetching and decryption to use after log in
-  clearInputs();
-  const authContainer = document.getElementById("auth-container");
-  const chatApp = document.getElementById("chat-app");
-  if (authContainer && chatApp) {
-    authContainer.style.display = "none";
-    chatApp.style.display = "flex";
-    console.log("Logged in as:", email);
+  const result = await response.json();
+
+  if (response.ok) {
+    const user = result.user;
+    const saltBuffer = new Uint8Array(_base64ToArrayBuffer(user.salt));
+    const { aesKey, hmacKey } = await generateStorageKey(password, saltBuffer);
+    try {
+      const privateKey = await verifyAndDecrypt(
+        {
+          iv: user.iv,
+          ciphertext: user.encryptedPrivateKey,
+          mac: user.mac,
+        },
+        aesKey,
+        hmacKey,
+      );
+      localStorage.setItem("my_email", result.user.email);
+      localStorage.setItem("jwt_token", result.token);
+      localStorage.setItem("my_private_key", privateKey);
+
+      alert("Login Successful!");
+      document.getElementById("auth-container").style.display = "none";
+      document.getElementById("chat-app").style.display = "flex";
+    } catch (err) {
+      console.error(err);
+      alert("Login failed: Could not decrypt private key.");
+    }
   } else {
-    console.error("Error: Container ID not found!");
+    alert(result.error);
   }
 }
 
@@ -123,6 +148,19 @@ function clearInputs() {
   inputs.forEach((input) => {
     input.value = "";
   });
+}
+
+async function decryptPrivateKey(encrypted_pk, password, saltStr) {
+  const salt = _base64ToArrayBuffer(saltStr);
+  const { aesKey, hmacKey } = await getStorageKey(password, salt);
+  const privateKeyStr = await decryptAndVerify(
+    encrypted_pk.ciphertext,
+    encrypted_pk.iv,
+    encrypted_pk.mac,
+    aesKey,
+    hmacKey,
+  );
+  return privateKeyStr;
 }
 
 window.handleRegister = handleRegister;
